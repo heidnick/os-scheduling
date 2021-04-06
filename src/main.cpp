@@ -77,6 +77,8 @@ int main(int argc, char **argv)
 
     // Main thread work goes here
     int num_lines = 0;
+    uint64_t last_time_slice = start;
+    int time_slice_flag = 0;
     while (!(shared_data->all_terminated))
     {        
         // Clear output from previous iteration
@@ -85,6 +87,13 @@ int main(int argc, char **argv)
         // Do the following:
         //   - Get current time
         uint64_t curTime = currentTime();
+
+        //   - Time slice check
+        if (curTime >= last_time_slice + shared_data->time_slice) {
+            last_time_slice = last_time_slice + shared_data->time_slice;
+            time_slice_flag = 1;            
+        }
+
         //   1 - *Check if any processes need to move from NotStarted to Ready (based on elapsed time), and if so put that process in the ready queue
         //   2 - *Check if any processes have finished their I/O burst, and if so put that process back in the ready queue
         //   3 - *Check if any running process need to be interrupted (RR time slice expires or newly ready process has higher priority)
@@ -111,7 +120,36 @@ int main(int argc, char **argv)
                         shared_data->ready_queue.push_back(processes[i]);
                     }
                 }
+                
+                // 3 - Running process interrupt check
+                if (processes[i]->getState() == Process::State::Running) {
+                    
+                    // If the algorithm is RR, check time slice for interrupt
+                    if (shared_data->algorithm == ScheduleAlgorithm::RR && time_slice_flag == 1) {
+                        processes[i]->interrupt();
+                    }
+                    
+                    // If the algorithm is PP, check if newly created process has greater priority
+                    /*if (shared_data->algorithm == ScheduleAlgorithm::PP) {
+                        int found_new_hp = 0;
+                        int i = 0;
+                        while (found_new_hp == 0) {
+                            if (shared_data->ready_queue[i]->get)
+                        }
+                    }*/
 
+                }
+
+            }
+
+            //SJF sorting
+            if (shared_data->algorithm == ScheduleAlgorithm::SJF) {
+                shared_data->ready_queue.sort(SjfComparator());
+            }
+
+            //PP sorting
+            if (shared_data->algorithm == ScheduleAlgorithm::PP) {
+                shared_data->ready_queue.sort(PpComparator());
             }
 
             // 5 - Ready queue is now sorted, now notifies waiting coreRunProcesses threads
@@ -158,15 +196,15 @@ void coreRunProcesses(uint8_t core_id, SchedulerData *shared_data)
 {
     // Work to be done by each core idependent of the other cores
     // Repeat until all processes in terminated state:
-    //   1 - *Get process at front of ready queue
-    //   - Simulate the processes running until one of the following:
-    //     - CPU burst time has elapsed
-    //     - Interrupted (RR time slice has elapsed or process preempted by higher priority process)
-    //  - Place the process back in the appropriate queue
-    //     - I/O queue if CPU burst finished (and process not finished) -- no actual queue, simply set state to IO
-    //     - Terminated if CPU burst finished and no more bursts remain -- no actual queue, simply set state to Terminated
-    //     - *Ready queue if interrupted (be sure to modify the CPU burst time to now reflect the remaining time)
-    //  - Wait context switching time
+    //  1 - *Get process at front of ready queue
+    //  2 - Simulate the processes running until one of the following:
+    //    2a - CPU burst time has elapsed
+    //    2b - Interrupted (RR time slice has elapsed or process preempted by higher priority process)
+    //  3 - Place the process back in the appropriate queue
+    //    3a - I/O queue if CPU burst finished (and process not finished) -- no actual queue, simply set state to IO
+    //    3b - Terminated if CPU burst finished and no more bursts remain -- no actual queue, simply set state to Terminated
+    //    3c - *Ready queue if interrupted (be sure to modify the CPU burst time to now reflect the remaining time)
+    //  4 - Wait context switching time
     //  - * = accesses shared data (ready queue), so be sure to use proper synchronization
     while(!(shared_data->all_terminated)){
         //Creating the lock, condition calls wait for main to release lock

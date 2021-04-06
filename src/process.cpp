@@ -162,7 +162,7 @@ void Process::updateBurstTime(int burst_idx, uint32_t new_time)
 bool SjfComparator::operator ()(const Process *p1, const Process *p2)
 {
     // your code here!
-    if (p1->getRemainingTime() >= p2->getBurstStartTime()){
+    if (p1->getRemainingTime() > p2->getBurstStartTime()){
         return true;
     }else {
         return false;
@@ -173,7 +173,7 @@ bool SjfComparator::operator ()(const Process *p1, const Process *p2)
 bool PpComparator::operator ()(const Process *p1, const Process *p2)
 {
     // your code here!
-    if (p1->getPriority() >= p2->getPriority()){
+    if (p1->getPriority() > p2->getPriority()){
         return true;
     }else {
         return false;
