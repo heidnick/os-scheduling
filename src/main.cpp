@@ -79,10 +79,13 @@ int main(int argc, char **argv)
     int num_lines = 0;
     uint64_t last_time_slice = start;
     int time_slice_flag = 0;
-    while (!(shared_data->all_terminated))
+    //int k = 0;
+    while (!(shared_data->all_terminated)) 
+    //while (k < 20)
     {        
+        //k++;
         // Clear output from previous iteration
-        clearOutput(num_lines);
+        //clearOutput(num_lines);
 
         // Do the following:
         //   - Get current time
@@ -109,6 +112,8 @@ int main(int argc, char **argv)
             //This loops through all processes
             for (int i=0; i<processes.size(); i++){
 
+                processes[i]->updateProcess(curTime);
+
                 // 1 - Sets not started process to ready and loads into ready queue based on elapsed time
                 if (processes[i]->getStartTime() <= (curTime - start) && processes[i]->getState() == Process::State::NotStarted) {
                     processes[i]->setState(Process::State::Ready, curTime);
@@ -117,16 +122,11 @@ int main(int argc, char **argv)
 
                 // 2 - Check if process has finished IO burst, put in ready queue if they have completed time
                 if (processes[i]->getState() == Process::State::IO) {
-                    if (processes[i]->getBurstStartTime() + processes[i]->getBurst_times()[processes[i]->getCurrent_burst()] >= curTime){
+                    if ((processes[i]->getBurstStartTime() + processes[i]->getBurst_times()[processes[i]->getCurrent_burst()]) == curTime){
                         processes[i]->setState(Process::State::Ready, curTime);
                         shared_data->ready_queue.push_back(processes[i]);
-                        processes[i]->setCurrentBurst();
+                        processes[i]->incrementCurrentBurst();
                     }
-                }
-
-                //PP sorting
-                if (shared_data->algorithm == ScheduleAlgorithm::PP) {
-                    shared_data->ready_queue.sort(PpComparator());
                 }
                 
                 // 3 - Running process interrupt check
@@ -135,61 +135,63 @@ int main(int argc, char **argv)
                     // If the algorithm is RR, check time slice for interrupt
                     if (shared_data->algorithm == ScheduleAlgorithm::RR && time_slice_flag == 1) {
                         processes[i]->interrupt();
-                        processes[i]->setCpuCore(-1);
-                        uint32_t current_burst_time = processes[i]->getCurrent_burst_time();
-                        uint32_t elapsed_burst_time = current_burst_time - (curTime - processes[i]->getBurstStartTime());
-                        processes[i]->updateBurstTime(processes[i]->getCurrent_burst(), elapsed_burst_time);
-                        processes[i]->setState(Process::State::Ready, curTime);
-                        shared_data->ready_queue.push_back(processes[i]);
                     }
                     
                     // If the algorithm is PP, check if newly created process has greater priority
                     if (shared_data->algorithm == ScheduleAlgorithm::PP) {
                         if (shared_data->ready_queue.size() > 0) {
-                            if (shared_data->ready_queue.front()->getPriority() > processes[i]->getPriority()){
+                            if (shared_data->ready_queue.back()->getPriority() > processes[i]->getPriority()){
                                 processes[i]->interrupt();
-                                processes[i]->setCpuCore(-1);
-                                uint32_t current_burst_time = processes[i]->getCurrent_burst_time();
-                                uint32_t elapsed_burst_time = current_burst_time - (curTime - processes[i]->getBurstStartTime());
-                                processes[i]->updateBurstTime(processes[i]->getCurrent_burst(), elapsed_burst_time);
-                                processes[i]->setState(Process::State::Ready, curTime);
-                                shared_data->ready_queue.push_back(processes[i]);
                             }
                         }
                     }
                 }
 
+                //PP sorting
+                if (shared_data->algorithm == ScheduleAlgorithm::PP) {
+                    shared_data->ready_queue.sort(PpComparator());
+                }
+
+                //SJF sorting
+                if (shared_data->algorithm == ScheduleAlgorithm::SJF) {
+                    shared_data->ready_queue.sort(SjfComparator());
+                }
+
                 //terminated check
                 if (processes[i]->getState() == Process::State::Terminated) {
+                    //processes[i]->setTurn_time(curTime);
                     count_terminated ++;
                 }
             }//for loop
 
-            if (count_terminated == processes.size()) {
-                shared_data->all_terminated == true;
-            }
+            //std::cout << count_terminated << " : " << processes.size() << std::endl;
 
-            //SJF sorting
-            if (shared_data->algorithm == ScheduleAlgorithm::SJF) {
-                shared_data->ready_queue.sort(SjfComparator());
+            if (count_terminated == processes.size()) {
+                //std::cout << "runs" << std::endl;
+                shared_data->all_terminated == true;
             }
 
             //Reset time slice flag
             time_slice_flag = 0;
 
-            // 5 - Ready queue is now sorted, now notifies waiting coreRunProcesses threads
-            if (!shared_data->all_terminated){
-                shared_data->condition.notify_all();
-            }
+            
+            //std::cout << shared_data->all_terminated << std::endl;
         }//mutex scope
 
+        // 5 - Ready queue is now sorted, now notifies waiting coreRunProcesses threads
+        if (!(shared_data->all_terminated)){
+           shared_data->condition.notify_all();
+        }
 
         // output process status table
         num_lines = printProcessOutput(processes, shared_data->mutex);
 
         // sleep 50 ms
         usleep(50000);
+
     }//while loop
+
+    //std::cout << "out of loop" << std::endl;
 
 
     // wait for threads to finish
@@ -230,19 +232,84 @@ void coreRunProcesses(uint8_t core_id, SchedulerData *shared_data)
     //  4 - Wait context switching time
     //  - * = accesses shared data (ready queue), so be sure to use proper synchronization
     while(!(shared_data->all_terminated)){
-        //Creating the lock, condition calls wait for main to release lock
-        std::unique_lock<std::mutex> lock(shared_data->mutex);
-        shared_data->condition.wait(lock);
+        {
+            std::unique_lock<std::mutex> lock(shared_data->mutex);
+            shared_data->condition.wait(lock);
+            Process *p;
+            //{
+                // 1 - Get process at front of ready queue
+                //std::unique_lock<std::mutex> lock(shared_data->mutex);
+                //shared_data->condition.wait(lock);
+                if (shared_data->ready_queue.size() > 0){
+                    p = shared_data->ready_queue.front();
+                    shared_data->ready_queue.pop_front();
+                }
+                //lock.unlock();
+            //}
 
-        // 1 - Setting pointer p to the first element in the ready queue, (removing process from the queue?->uncomment pop_front)
-        if (shared_data->ready_queue.size() > 0) {
-            Process *p = shared_data->ready_queue.front();
-            //shared_data->ready_queue.pop_front();
+            uint64_t current_time = currentTime();
+
+            p->setCpuCore(core_id);
+            p->setState(Process::State::Running, current_time);
+            //std::cout << (int)core_id << std::endl;
+            p->setBurstStartTime(current_time);
+            uint32_t current_burst_time = p->getCurrent_burst_time();
+            uint64_t elapsed_burst_time = current_time - p->getBurstStartTime();
+
+            //std::cout << "ct: " << current_time << " ebt: "<< elapsed_burst_time << std::endl;
+
+
+            // 2 - Simulate process until 2a - interrupt or 2b - end of burst
+            int done = 0;
+            while ((p->isInterrupted()) || !done){
+                current_time = currentTime();
+
+                //find time elapsed
+                elapsed_burst_time = current_time - p->getBurstStartTime();
+                if (elapsed_burst_time == (uint64_t)current_burst_time) {
+                    //std::cout << "true: " << p->getPid() << " " << (int)p->getCpuCore() << std::endl;
+                    done = 1;
+                }
+                
+                //std::cout << "ebt: " << elapsed_burst_time << " cbt: "<< current_burst_time << std::endl;
+                //update process
+                p->updateProcess(current_time);
+
+            }
+                    
+            // 3a - 3b - 3c
+            if (p->isInterrupted()){
+                //{
+                    //std::unique_lock<std::mutex> lock(shared_data->mutex);
+                    //shared_data->condition.wait(lock);
+                    //std::cout << "isinterupted runs" << std::endl;
+                    p->setCpuCore(-1);
+                    uint32_t current_burst_time = p->getCurrent_burst_time();
+                    uint32_t elapsed_burst_time = current_burst_time - (current_time - p->getBurstStartTime());
+                    p->updateBurstTime(p->getCurrent_burst(), elapsed_burst_time);
+                    p->setState(Process::State::Ready, current_time);
+                    shared_data->ready_queue.push_back(p);
+                    //lock.unlock();
+                //}
+            }else if (p->getNum_bursts() == (p->getCurrent_burst() + 1)) {
+                //std::cout << p->getNum_bursts() << std::endl;
+                p->setCpuCore(-1);
+                p->setState(Process::State::Terminated, current_time);
+            }else {
+                p->setState(Process::State::IO, current_time);
+                p->setCpuCore(-1);
+                p->setBurstStartTime(current_time);
+                p->incrementCurrentBurst();
+            }
+
         }
 
+        //perform context switch
+        sleep(shared_data->context_switch/1000);
 
-        lock.unlock();
-    }
+
+        
+    }//while loop
     
 }
 

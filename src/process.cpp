@@ -29,6 +29,7 @@ Process::Process(ProcessDetails details, uint64_t current_time)
     {
         remain_time += burst_times[i];
     }
+    io_time = 0;
 }
 
 Process::~Process()
@@ -113,7 +114,7 @@ uint32_t* Process::getBurst_times() const
     return burst_times;
 }
 
-void Process::setCurrentBurst()
+void Process::incrementCurrentBurst()
 {
     current_burst++;
 }
@@ -133,9 +134,9 @@ void Process::setState(State new_state, uint64_t current_time)
     state = new_state;
 }
 
-void Process::setCpuCore(int8_t core_num)
+void Process::setCpuCore(uint8_t core_num)
 {
-    core = core_num;
+    core = (int8_t)core_num;
 }
 
 void Process::interrupt()
@@ -152,13 +153,17 @@ void Process::updateProcess(uint64_t current_time)
 {
     // use `current_time` to update turnaround time, wait time, burst times, 
     // cpu time, and remaining time
-    /*turn_time += current_time - turn_time;
+    if (state != Process::State::Terminated){
+        turn_time = current_time - launch_time;
+    }
     if (state == Process::State::Ready) {
-        wait_time += current_time - wait_time;
+        wait_time += turn_time - cpu_time - io_time;
     }else if (state == Process::State::Running) {
-        cpu_time += current_time - cpu_time;
-        remain_time += current_time - cpu_time;
-    }*/
+        cpu_time += current_time - burst_start_time;
+        remain_time -= cpu_time;
+    }else if (state == Process::State::IO) {
+        io_time += current_time - burst_start_time;
+    }
 }
 
 void Process::updateBurstTime(int burst_idx, uint32_t new_time)
@@ -191,3 +196,9 @@ bool PpComparator::operator ()(const Process *p1, const Process *p2)
         return false;
     }
 }
+
+void Process::setTurn_time(uint64_t current_time)
+{
+    turn_time = current_time - launch_time;
+}
+
