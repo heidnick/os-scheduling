@@ -9,11 +9,11 @@ Run following commands from user/../os-scheduling$ to compile and execute:
 To Complete:
 -process.cpp
  - update process
- - update burst time
- - SjfComparator
- - PpComparator
+ - update burst time (complete)
+ - SjfComparator (complete)
+ - PpComparator (complete)
 
 -main.cpp
- - main thread work line 78
- - print final statistics (below while loop)
- - coreRunProcess
+ - main thread work line 78 - (complete 4 still)
+ - print final statistics (below while loop) - (complete all still)
+ - coreRunProcess - (complete all still)

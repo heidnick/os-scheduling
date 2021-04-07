@@ -43,9 +43,10 @@ public:
     double getRemainingTime() const;
     uint16_t getNum_bursts() const;
     uint16_t getCurrent_burst() const;
+    uint32_t getCurrent_burst_time() const;
     uint32_t* getBurst_times() const;
 
-
+    void setCurrentBurst();
     void setBurstStartTime(uint64_t current_time);
     void setState(State new_state, uint64_t current_time);
     void setCpuCore(int8_t core_num);

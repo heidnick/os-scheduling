@@ -91,7 +91,8 @@ int main(int argc, char **argv)
         //   - Time slice check
         if (curTime >= last_time_slice + shared_data->time_slice) {
             last_time_slice = last_time_slice + shared_data->time_slice;
-            time_slice_flag = 1;            
+            time_slice_flag = 1;
+            //std::cout << last_time_slice << std::endl;  
         }
 
         //   1 - *Check if any processes need to move from NotStarted to Ready (based on elapsed time), and if so put that process in the ready queue
@@ -104,6 +105,7 @@ int main(int argc, char **argv)
             //Creating mutex lock
             std::lock_guard<std::mutex> lock(shared_data->mutex);
 
+            int count_terminated = 0;
             //This loops through all processes
             for (int i=0; i<processes.size(); i++){
 
@@ -118,7 +120,13 @@ int main(int argc, char **argv)
                     if (processes[i]->getBurstStartTime() + processes[i]->getBurst_times()[processes[i]->getCurrent_burst()] >= curTime){
                         processes[i]->setState(Process::State::Ready, curTime);
                         shared_data->ready_queue.push_back(processes[i]);
+                        processes[i]->setCurrentBurst();
                     }
+                }
+
+                //PP sorting
+                if (shared_data->algorithm == ScheduleAlgorithm::PP) {
+                    shared_data->ready_queue.sort(PpComparator());
                 }
                 
                 // 3 - Running process interrupt check
@@ -127,19 +135,38 @@ int main(int argc, char **argv)
                     // If the algorithm is RR, check time slice for interrupt
                     if (shared_data->algorithm == ScheduleAlgorithm::RR && time_slice_flag == 1) {
                         processes[i]->interrupt();
+                        processes[i]->setCpuCore(-1);
+                        uint32_t current_burst_time = processes[i]->getCurrent_burst_time();
+                        uint32_t elapsed_burst_time = current_burst_time - (curTime - processes[i]->getBurstStartTime());
+                        processes[i]->updateBurstTime(processes[i]->getCurrent_burst(), elapsed_burst_time);
+                        processes[i]->setState(Process::State::Ready, curTime);
+                        shared_data->ready_queue.push_back(processes[i]);
                     }
                     
                     // If the algorithm is PP, check if newly created process has greater priority
-                    /*if (shared_data->algorithm == ScheduleAlgorithm::PP) {
-                        int found_new_hp = 0;
-                        int i = 0;
-                        while (found_new_hp == 0) {
-                            if (shared_data->ready_queue[i]->get)
+                    if (shared_data->algorithm == ScheduleAlgorithm::PP) {
+                        if (shared_data->ready_queue.size() > 0) {
+                            if (shared_data->ready_queue.front()->getPriority() > processes[i]->getPriority()){
+                                processes[i]->interrupt();
+                                processes[i]->setCpuCore(-1);
+                                uint32_t current_burst_time = processes[i]->getCurrent_burst_time();
+                                uint32_t elapsed_burst_time = current_burst_time - (curTime - processes[i]->getBurstStartTime());
+                                processes[i]->updateBurstTime(processes[i]->getCurrent_burst(), elapsed_burst_time);
+                                processes[i]->setState(Process::State::Ready, curTime);
+                                shared_data->ready_queue.push_back(processes[i]);
+                            }
                         }
-                    }*/
-
+                    }
                 }
 
+                //terminated check
+                if (processes[i]->getState() == Process::State::Terminated) {
+                    count_terminated ++;
+                }
+            }//for loop
+
+            if (count_terminated == processes.size()) {
+                shared_data->all_terminated == true;
             }
 
             //SJF sorting
@@ -147,18 +174,14 @@ int main(int argc, char **argv)
                 shared_data->ready_queue.sort(SjfComparator());
             }
 
-            //PP sorting
-            if (shared_data->algorithm == ScheduleAlgorithm::PP) {
-                shared_data->ready_queue.sort(PpComparator());
-            }
+            //Reset time slice flag
+            time_slice_flag = 0;
 
             // 5 - Ready queue is now sorted, now notifies waiting coreRunProcesses threads
-            shared_data->condition.notify_all();
-        }
-
-        if (shared_data->all_terminated){
-            exit(1);
-        }
+            if (!shared_data->all_terminated){
+                shared_data->condition.notify_all();
+            }
+        }//mutex scope
 
 
         // output process status table
@@ -166,7 +189,7 @@ int main(int argc, char **argv)
 
         // sleep 50 ms
         usleep(50000);
-    }
+    }//while loop
 
 
     // wait for threads to finish
