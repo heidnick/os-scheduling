@@ -8,6 +8,12 @@ Process::Process(ProcessDetails details, uint64_t current_time)
     start_time = details.start_time;
     num_bursts = details.num_bursts;
     current_burst = 0;
+    last_burst = 0;
+    current_wait_burst = 0;
+    last_wait_burst = 0;
+    last_burst_time_added = 0;
+    last_wait_burst_time_added = 0;
+    ready_start_time = 0;
     burst_times = new uint32_t[num_bursts];
     for (i = 0; i < num_bursts; i++)
     {
@@ -20,6 +26,7 @@ Process::Process(ProcessDetails details, uint64_t current_time)
         launch_time = current_time;
     }
     is_interrupted = false;
+    ready_out = true;
     core = -1;
     turn_time = 0;
     wait_time = 0;
@@ -119,6 +126,11 @@ void Process::incrementCurrentBurst()
     current_burst++;
 }
 
+void Process::incrementCurrentWaitBurst()
+{
+    current_wait_burst++;
+}
+
 
 void Process::setBurstStartTime(uint64_t current_time)
 {
@@ -153,16 +165,33 @@ void Process::updateProcess(uint64_t current_time)
 {
     // use `current_time` to update turnaround time, wait time, burst times, 
     // cpu time, and remaining time
-    if (state != Process::State::Terminated){
+    
+
+    if (getState() != Process::State::Terminated){
         turn_time = current_time - launch_time;
     }
-    if (state == Process::State::Ready) {
-        wait_time += turn_time - cpu_time - io_time;
-    }else if (state == Process::State::Running) {
-        cpu_time += current_time - burst_start_time;
-        remain_time -= cpu_time;
-    }else if (state == Process::State::IO) {
-        io_time += current_time - burst_start_time;
+    if (getState() == Process::State::Ready) {
+        if (current_wait_burst > last_wait_burst) {
+            last_wait_burst = current_wait_burst;
+            last_wait_burst_time_added = 0;
+        }
+        int32_t new_wait_time_added = current_time - ready_start_time;
+        wait_time +=  new_wait_time_added - last_wait_burst_time_added;
+        last_wait_burst_time_added = current_time - ready_start_time;
+
+    }
+    if (getState() == Process::State::Running) {
+        if (current_burst > last_burst) {
+            last_burst = current_burst;
+            last_burst_time_added = 0;
+        }
+        int32_t new_cpu_time_added = current_time - burst_start_time;
+        int32_t old_remain_time = remain_time;
+        cpu_time +=  new_cpu_time_added - last_burst_time_added;
+        remain_time = old_remain_time - new_cpu_time_added + last_burst_time_added;
+        last_burst_time_added = current_time - burst_start_time; 
+        
+        
     }
 }
 
@@ -179,7 +208,7 @@ void Process::updateBurstTime(int burst_idx, uint32_t new_time)
 bool SjfComparator::operator ()(const Process *p1, const Process *p2)
 {
     // your code here!
-    if (p1->getRemainingTime() <= p2->getBurstStartTime()){
+    if (p1->getRemainingTime() <= p2->getRemainingTime()){
         return true;
     }else {
         return false;
@@ -201,4 +230,15 @@ void Process::setTurn_time(uint64_t current_time)
 {
     turn_time = current_time - launch_time;
 }
+
+void Process::setReady_start_time(uint64_t new_ready_start_time)
+{
+    ready_start_time = new_ready_start_time;
+}
+
+void Process::readyOut(bool param)
+{
+    ready_out = param;
+}
+
 

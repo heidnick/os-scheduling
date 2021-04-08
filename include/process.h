@@ -13,11 +13,18 @@ private:
     uint32_t start_time;        // ms after program starts that process should be 'launched'
     uint16_t num_bursts;        // number of CPU/IO bursts
     uint16_t current_burst;     // current index into the CPU/IO burst array
+    uint16_t last_burst;
+    uint16_t current_wait_burst;
+    uint16_t last_wait_burst;
+    int32_t last_burst_time_added;
+    int32_t last_wait_burst_time_added;       
     uint32_t *burst_times;      // CPU/IO burst array of times (in ms)
-    uint8_t priority;           // process priority (0-4)
+    uint8_t priority;         // process priority (0-4)
+    uint64_t ready_start_time;
     uint64_t burst_start_time;  // time that the current CPU/IO burst began
     State state;                // process state
     bool is_interrupted;        // whether or not the process is being interrupted
+    bool ready_out;
     int8_t core;                // CPU core currently running on
     int32_t turn_time;          // total time since 'launch' (until terminated)
     int32_t wait_time;          // total time spent in ready queue
@@ -48,16 +55,20 @@ public:
     uint32_t* getBurst_times() const;
 
     void incrementCurrentBurst();
+    void incrementCurrentWaitBurst();
     void setBurstStartTime(uint64_t current_time);
     void setState(State new_state, uint64_t current_time);
     void setCpuCore(uint8_t core_num);
     void interrupt();
     void interruptHandled();
+    void readyOut(bool param);
+
 
     void updateProcess(uint64_t current_time);
     void updateBurstTime(int burst_idx, uint32_t new_time);
 
     void setTurn_time(uint64_t current_time);
+    void setReady_start_time(uint64_t ready_start_time);
 };
 
 // Comparators: used in std::list sort() method
