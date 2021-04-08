@@ -82,7 +82,7 @@ int main(int argc, char **argv)
     int num_lines = 0;
     uint64_t last_time_slice;
     int time_slice_flag = 0;
-    
+    uint64_t finish;
     //Creating mutex lock
     std::unique_lock<std::mutex> lock(shared_data->mutex, std::defer_lock);
     while (!(shared_data->all_terminated))
@@ -181,6 +181,7 @@ int main(int argc, char **argv)
         if (count_terminated == processes.size()) {
             //std::cout << "all terminated " << std::endl;
             shared_data->all_terminated = true;
+            finish = curTime;
         }
 
 
@@ -207,17 +208,33 @@ int main(int argc, char **argv)
     //  - Average turnaround time
     //  - Average waiting time
     int turn, wait, cpu, tot_run;
+    int32_t mid = (finish - start) / 2;
+
+    int low, high = 0;
     for (int i=0; i<processes.size(); i++) {
         turn += processes[i]->getTurnaroundTime();
         wait += processes[i]->getWaitTime();
         cpu += processes[i]->getCpuTime();
+        if (processes[i]->getTurnaroundTime() < mid) {
+            low++;
+        }else{
+            high++;
+        }
     }
+    cpu = cpu / turn;
     turn = turn / processes.size();
     wait = wait / processes.size();
-    cpu = cpu / processes.size();
 
-    std::cout << "Average turnaround time: " << turn << std::endl;
+    printf("CPU utilization: %d\n", cpu);
+    printf("Troughput 0-50: %d\n", low);
+    printf("Troughput 50-100: %d\n", high);
+    printf("Troughput 0-100: %d\n", low+high);
+    printf("Average turnaround time: %d\n", turn);
+    printf("Average waiting time: %d\n", wait);
+
+
     
+
     
 
 
